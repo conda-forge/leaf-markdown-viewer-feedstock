@@ -10,12 +10,22 @@ source:
   sha256: 594693cf012f51963f95090b7439dfd1c5194f18f12d93293dc7ad2c8909101b
 
 build:
-  number: 0
+  number: 1
   script:
     env:
       CARGO_PROFILE_RELEASE_STRIP: symbols
       CARGO_PROFILE_RELEASE_LTO: fat
     content:
+      # onig_sys' C objects, built by the ppc64le cross-gcc, carry PLT-sequence
+      # relocations that the lld rustc links with via `-fuse-ld=lld` cannot
+      # resolve. `-C link-arg` is appended after rustc's own flags and gcc
+      # honours the last `-fuse-ld`, so this picks GNU ld, which handles them.
+      # Append to CARGO_BUILD_RUSTFLAGS rather than RUSTFLAGS: the two are
+      # mutually exclusive, and the rust activation script puts the $PREFIX
+      # rpath flags in CARGO_BUILD_RUSTFLAGS.
+      - if: target_platform == "linux-ppc64le"
+        then:
+          - export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS} -C link-arg=-fuse-ld=bfd"
       - if: unix
         then:
           - cargo auditable install --locked --no-track --bins --root ${{ PREFIX }} --path .
